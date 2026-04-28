@@ -10,11 +10,12 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Hilt module providing application-scoped utilities.
+ * AppModule provides application-level singleton dependencies that are not
+ * related to the database layer (those live in [DatabaseModule]).
  *
- * [SessionManager] is a singleton because the DataStore instance it wraps must
- * never be duplicated — multiple instances targeting the same file cause
- * IllegalStateException at runtime.
+ * SessionManager is scoped to SingletonComponent because it wraps a DataStore
+ * instance — DataStore must be a singleton per process to avoid concurrent
+ * write conflicts and IOException on initialisation.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -22,6 +23,6 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSessionManager(@ApplicationContext context: Context): SessionManager =
-        SessionManager(context)
+    fun provideSessionManager(@ApplicationContext ctx: Context): SessionManager =
+        SessionManager(ctx)
 }
