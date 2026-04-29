@@ -3,10 +3,10 @@
 **PROG7313 / OPSC7311 — Programming 3C / Open Source Coding**
 **The Independent Institute of Education · 2026**
 
-[![CI Build & Tests](https://github.com/YOUR_USERNAME/BudgetWise/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/BudgetWise/actions/workflows/build.yml)
-
+[![CI Build & Tests](https://github.com/ST10450618/PROG7313_Assignment2/actions/workflows/build.yml/badge.svg).
+[![CI Tests](https://github.com/ST10450618/PROG7313_Assignment2/blob/main/.github/workflows/build.yml)
 ---
-
+https://github.com/ST10450618/PROG7313_Assignment2/blob/main/.github/workflows/build.yml 
 ## Table of Contents
 1. [AI Disclosure Statement](#-ai-disclosure-statement)
 2. [Project Overview](#-project-overview)
