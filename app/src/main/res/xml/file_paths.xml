@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    FileProvider path configuration for CameraX receipt photos.
+    external-files-path maps to Context.getExternalFilesDir() — app-private storage.
+    No READ_EXTERNAL_STORAGE permission required on API 29+.
+    Photos saved to getExternalFilesDir("photos") via createImageFile() in AddExpenseScreen.kt.
+-->
 <paths>
-    <!--
-        external-files-path: Points to getExternalFilesDir() — app-private external storage.
-        This is where CameraX saves captured receipt photos. The path attribute "." means
-        the root of that directory, so any subdirectory (e.g. "photos/") will be covered.
-    -->
     <external-files-path name="photos" path="." />
 </paths>

@@ -3,11 +3,10 @@
 
     <!-- Camera permission for receipt photo capture -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Read external storage for API < 33 -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+    <!-- READ_EXTERNAL_STORAGE for API ≤ 32 only (not needed API 29+ for app-private files) -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".BudgetWiseApp"
@@ -18,10 +17,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.BudgetWise">
 
+        <!-- Single activity entry point -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:theme="@style/Theme.BudgetWise">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -29,9 +29,9 @@
         </activity>
 
         <!--
-            FileProvider: Required for securely sharing camera-captured photo URIs
-            between BudgetWise and the system camera app on Android 7.0+.
-            Without this, a FileUriExposedException would crash the app on launch.
+            FileProvider for CameraX receipt photos.
+            Authority MUST match FileProvider.getUriForFile() call in AddExpenseScreen.kt:
+              "${context.packageName}.fileprovider" == "com.budgetwise.app.fileprovider"
         -->
         <provider
             android:name="androidx.core.content.FileProvider"

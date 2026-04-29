@@ -15,12 +15,17 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Hilt module providing all repository singletons.
+ * Hilt DI module that provides all four Repository singletons.
  *
- * Repositories are scoped to SingletonComponent so that every ViewModel
- * across the application receives the same repository instance and therefore
- * the same underlying Room Flow — preventing duplicate database subscriptions
- * or stale data caused by multiple in-flight queries on different instances.
+ * Each repository receives its required DAO(s) via constructor injection.
+ * The DAOs themselves are provided by DatabaseModule.
+ *
+ * Installed in SingletonComponent — one repository instance per process ensures
+ * all ViewModels share the same cache and avoid duplicate Room subscriptions.
+ *
+ * Note: Because repositories use @Singleton + @Inject annotations directly,
+ * Hilt can resolve them automatically. This explicit @Module is provided for
+ * clarity and to centralise the DI graph documentation in one place.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -28,19 +33,21 @@ object RepositoryModule {
 
     @Provides
     @Singleton
-    fun provideUserRepository(dao: UserDao): UserRepository = UserRepository(dao)
+    fun provideUserRepository(userDao: UserDao): UserRepository =
+        UserRepository(userDao)
 
     @Provides
     @Singleton
-    fun provideCategoryRepository(dao: CategoryDao): CategoryRepository =
-        CategoryRepository(dao)
+    fun provideCategoryRepository(categoryDao: CategoryDao): CategoryRepository =
+        CategoryRepository(categoryDao)
 
     @Provides
     @Singleton
-    fun provideExpenseRepository(dao: ExpenseDao): ExpenseRepository =
-        ExpenseRepository(dao)
+    fun provideExpenseRepository(expenseDao: ExpenseDao): ExpenseRepository =
+        ExpenseRepository(expenseDao)
 
     @Provides
     @Singleton
-    fun provideGoalRepository(dao: MonthlyGoalDao): GoalRepository = GoalRepository(dao)
+    fun provideGoalRepository(monthlyGoalDao: MonthlyGoalDao): GoalRepository =
+        GoalRepository(monthlyGoalDao)
 }

@@ -8,131 +8,307 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetwise.app.data.local.entity.Category
+import com.budgetwise.app.ui.theme.BackgroundLight
 import com.budgetwise.app.ui.theme.CoralAlert
 import com.budgetwise.app.ui.theme.TealPrimary
+import kotlinx.coroutines.launch
 
+/**
+ * 12 curated brand-appropriate hex colour strings for the category colour picker.
+ * Displayed as a 2×6 circle grid in AddCategoryDialog.
+ */
 val CATEGORY_COLOURS = listOf(
-    "#1B998B","#06D6A0","#0F4C5C","#E16162",
-    "#FDD05C","#3A86FF","#FF6B6B","#6BCB77",
-    "#845EC2","#FF9671","#4B4453","#00C9A7"
+    "#1B998B", "#06D6A0", "#0F4C5C", "#E16162",
+    "#FDD05C", "#4ECDC4", "#FF6B6B", "#A8DADC",
+    "#457B9D", "#F4A261", "#2A9D8F", "#E9C46A"
 )
 
-fun parseColour(hex: String): Color = try {
-    Color(android.graphics.Color.parseColor(hex))
-} catch (e: Exception) { Color(0xFF1B998B) }
+/**
+ * Parse a hex colour string to a Compose Color.
+ * Handles "#RRGGBB" format with the leading #.
+ * Returns TealPrimary as a safe fallback for invalid strings.
+ */
+fun parseColor(hex: String): Color {
+    return try {
+        Color(android.graphics.Color.parseColor(hex))
+    } catch (e: IllegalArgumentException) {
+        TealPrimary
+    }
+}
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Categories screen — manage expense categories.
+ *
+ * Layout:
+ * - TopAppBar with title
+ * - LazyColumn of CategoryCard items (colour circle + name + delete button)
+ * - Empty state placeholder when no categories exist
+ * - FAB (bottom right) → opens AddCategoryDialog
+ * - AddCategoryDialog: name text field + 12-colour circle picker (2×6 grid)
+ * - Delete confirmation AlertDialog
+ * - Snackbar for success/error feedback
+ */
 @Composable
-fun CategoryScreen(vm: CategoryViewModel = hiltViewModel()) {
-    val categories by vm.categories.collectAsStateWithLifecycle()
-    val ui         by vm.uiState.collectAsStateWithLifecycle()
-    val snack       = remember { SnackbarHostState() }
-    var showAdd    by remember { mutableStateOf(false) }
-    var toDelete   by remember { mutableStateOf<Category?>(null) }
+fun CategoryScreen(
+    viewModel: CategoryViewModel = hiltViewModel()
+) {
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val successMsg by viewModel.successMsg.collectAsStateWithLifecycle()
+    val errorMsg   by viewModel.errorMsg.collectAsStateWithLifecycle()
 
-    LaunchedEffect(ui.success, ui.error) {
-        (ui.success ?: ui.error)?.let { snack.showSnackbar(it); vm.clearMessages() }
+    var showAddDialog      by remember { mutableStateOf(false) }
+    var categoryToDelete   by remember { mutableStateOf<Category?>(null) }
+
+    val snackbarHostState  = remember { SnackbarHostState() }
+    val scope              = rememberCoroutineScope()
+
+    // Show snackbar on success or error
+    LaunchedEffect(successMsg) {
+        if (successMsg != null) {
+            scope.launch { snackbarHostState.showSnackbar(successMsg!!) }
+            viewModel.clearMessages()
+        }
+    }
+    LaunchedEffect(errorMsg) {
+        if (errorMsg != null) {
+            scope.launch { snackbarHostState.showSnackbar(errorMsg!!) }
+            viewModel.clearMessages()
+        }
+    }
+
+    // Delete confirmation dialog
+    categoryToDelete?.let { cat ->
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            title   = { Text("Delete Category") },
+            text    = { Text("Delete '${cat.name}'? Expenses in this category will become uncategorised.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteCategory(cat)
+                    categoryToDelete = null
+                }) { Text("Delete", color = CoralAlert) }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Add category dialog
+    if (showAddDialog) {
+        AddCategoryDialog(
+            onDismiss = { showAddDialog = false },
+            onConfirm = { name, colour ->
+                viewModel.addCategory(name, colour)
+                showAddDialog = false
+            }
+        )
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snack) },
         topBar = {
             TopAppBar(
-                title  = { Text("Categories", fontWeight = FontWeight.SemiBold) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = TealPrimary, titleContentColor = Color.White)
+                title  = { Text("Categories", color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TealPrimary)
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAdd = true }, containerColor = TealPrimary) {
-                Icon(Icons.Filled.Add, "Add Category", tint = Color.White)
-            }
-        }
-    ) { pad ->
-        if (categories.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.Category, null, Modifier.size(64.dp), tint = TealPrimary.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(12.dp))
-                    Text("No categories yet", style = MaterialTheme.typography.titleMedium)
-                    Text("Tap + to create one", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                }
-            }
-        } else {
-            LazyColumn(
-                Modifier.fillMaxSize().padding(pad),
-                contentPadding      = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            FloatingActionButton(
+                onClick           = { showAddDialog = true },
+                containerColor    = TealPrimary,
+                contentColor      = Color.White
             ) {
-                items(categories, key = { it.id }) { cat ->
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), elevation = CardDefaults.cardElevation(2.dp)) {
-                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(40.dp).clip(CircleShape).background(parseColour(cat.colorHex)))
-                            Spacer(Modifier.width(16.dp))
-                            Text(cat.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                            IconButton(onClick = { toDelete = cat }) {
-                                Icon(Icons.Filled.Delete, "Delete", tint = CoralAlert)
-                            }
-                        }
+                Icon(Icons.Filled.Add, contentDescription = "Add Category")
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(BackgroundLight)
+                .padding(padding)
+        ) {
+            if (categories.isEmpty()) {
+                // Empty state
+                Column(
+                    modifier            = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("📂", style = MaterialTheme.typography.displaySmall)
+                    Text(
+                        text  = "No categories yet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text  = "Tap + to create your first category",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize(),
+                    contentPadding      = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(categories, key = { it.id }) { category ->
+                        CategoryCard(
+                            category = category,
+                            onDelete = { categoryToDelete = category }
+                        )
                     }
                 }
             }
         }
     }
+}
 
-    if (showAdd) AddCategoryDialog(onDismiss = { showAdd = false }, onConfirm = { n, c -> vm.add(n, c); showAdd = false })
+/**
+ * Individual category row card: colour circle + name + delete icon button.
+ */
+@Composable
+fun CategoryCard(
+    category: Category,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(12.dp),
+        colors    = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier            = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment   = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Colour circle indicator
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(parseColor(category.colorHex))
+            )
 
-    toDelete?.let { cat ->
-        AlertDialog(
-            onDismissRequest = { toDelete = null },
-            title = { Text("Delete Category") },
-            text  = { Text("Delete '${cat.name}'? Associated expenses will become uncategorised.") },
-            confirmButton = { TextButton(onClick = { vm.delete(cat); toDelete = null }, colors = ButtonDefaults.textButtonColors(contentColor = CoralAlert)) { Text("Delete") } },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Cancel") } }
-        )
+            // Category name
+            Text(
+                text     = category.name,
+                style    = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f)
+            )
+
+            // Delete button
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector        = Icons.Filled.Delete,
+                    contentDescription = "Delete ${category.name}",
+                    tint               = CoralAlert
+                )
+            }
+        }
     }
 }
 
+/**
+ * Dialog for adding a new category.
+ * Contains:
+ * - Name OutlinedTextField
+ * - 12-colour circle picker arranged in 2 rows of 6
+ * - Cancel + Add buttons
+ */
 @Composable
-private fun AddCategoryDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
-    var name     by remember { mutableStateOf("") }
-    var selected by remember { mutableStateOf(CATEGORY_COLOURS.first()) }
+fun AddCategoryDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, colorHex: String) -> Unit
+) {
+    var name            by remember { mutableStateOf("") }
+    var selectedColour  by remember { mutableStateOf(CATEGORY_COLOURS[0]) }
+    val focusManager    = LocalFocusManager.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Category") },
-        text  = {
-            Column {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Category Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
-                Text("Pick a colour", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(8.dp))
-                CATEGORY_COLOURS.chunked(6).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-                        row.forEach { hex ->
+        title   = { Text("New Category") },
+        text    = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Name input
+                OutlinedTextField(
+                    value         = name,
+                    onValueChange = { name = it },
+                    label         = { Text("Category Name") },
+                    singleLine    = true,
+                    modifier      = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = TealPrimary,
+                        focusedLabelColor  = TealPrimary,
+                        cursorColor        = TealPrimary
+                    )
+                )
+
+                // Colour picker — 2 rows of 6 circles
+                Text(
+                    "Choose a colour",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                CATEGORY_COLOURS.chunked(6).forEach { rowColours ->
+                    Row(
+                        modifier              = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        rowColours.forEach { hex ->
+                            val isSelected = hex == selectedColour
                             Box(
-                                Modifier.size(36.dp).clip(CircleShape).background(parseColour(hex))
-                                    .then(if (selected == hex) Modifier.border(3.dp, Color.Black, CircleShape) else Modifier)
-                                    .clickable { selected = hex }
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(parseColor(hex))
+                                    .then(
+                                        if (isSelected)
+                                            Modifier.border(3.dp, Color.White, CircleShape)
+                                                .border(4.dp, parseColor(hex).copy(alpha = 0.6f), CircleShape)
+                                        else Modifier
+                                    )
+                                    .clickable { selectedColour = hex }
                             )
                         }
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = { if (name.isNotBlank()) onConfirm(name, selected) }, enabled = name.isNotBlank()) { Text("Create") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = {
+            TextButton(
+                onClick  = { if (name.isNotBlank()) onConfirm(name, selectedColour) },
+                enabled  = name.isNotBlank()
+            ) {
+                Text("Add", color = TealPrimary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
     )
 }

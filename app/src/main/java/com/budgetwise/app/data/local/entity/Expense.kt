@@ -6,21 +6,27 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Room entity representing a single expense record.
+ * Room entity representing the `expenses` table.
  *
- * [date] is stored as startOfDay(epochMs) so BETWEEN queries work correctly
- * across timezones — see DateUtils.startOfDay().
+ * Schema:
+ *   id          INTEGER PRIMARY KEY AUTOINCREMENT
+ *   userId      INTEGER NOT NULL  (FK → users.id ON DELETE CASCADE)
+ *   categoryId  INTEGER nullable  (FK → categories.id ON DELETE SET NULL)
+ *   amount      REAL NOT NULL     (ZAR, stored as Double)
+ *   description TEXT NOT NULL     (max 100 chars — enforced in AddExpenseScreen UI)
+ *   date        INTEGER NOT NULL  (epoch ms, normalised to startOfDay() via DateUtils)
+ *   startTime   TEXT NOT NULL     ("HH:mm" e.g. "09:30" — RUBRIC MANDATORY)
+ *   endTime     TEXT NOT NULL     ("HH:mm" e.g. "10:15" — RUBRIC MANDATORY)
+ *   photoUri    TEXT nullable     (content:// URI string, NULL if no photo)
+ *   createdAt   INTEGER NOT NULL  (epoch ms)
  *
- * [categoryId] is nullable: expenses become uncategorised if their category
- * is deleted (ON DELETE SET NULL).
- *
- * [photoUri] stores a content:// URI string produced by FileProvider — nullable
- * because attaching a receipt photo is optional.
- *
- * TODO (James): Verify field names match your DAO queries and AddExpenseScreen exactly.
+ * Key decisions:
+ * - categoryId uses SET NULL so expenses survive category deletion (they become uncategorised)
+ * - date is always stored as startOfDay(pickedDateMs) so BETWEEN SQL queries work correctly
+ * - startTime / endTime are stored as "HH:mm" strings for simple display and comparison
  */
 @Entity(
-    tableName   = "expenses",
+    tableName = "expenses",
     foreignKeys = [
         ForeignKey(
             entity        = User::class,
@@ -35,17 +41,53 @@ import androidx.room.PrimaryKey
             onDelete      = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("userId"), Index("categoryId")]
+    indices = [
+        Index(value = ["userId"]),
+        Index(value = ["categoryId"])
+    ]
 )
 data class Expense(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val userId     : Long,
-    val categoryId : Long?,           // nullable — SET NULL on category delete
-    val amount     : Double,
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0L,
+
+    /** Owner of this expense — references users.id. */
+    val userId: Long,
+
+    /** FK to categories.id. Null when the linked category has been deleted (SET NULL). */
+    val categoryId: Long? = null,
+
+    /** Amount in South African Rand. Must be > 0 (validated in ExpenseViewModel). */
+    val amount: Double,
+
+    /** Human-readable description, max 100 characters. */
     val description: String,
-    val date       : Long,            // startOfDay(epochMs) — use DateUtils.startOfDay()
-    val startTime  : String,          // "HH:mm" e.g. "09:30"
-    val endTime    : String,          // "HH:mm" e.g. "10:15" — must be > startTime
-    val photoUri   : String? = null,  // content:// URI from FileProvider, nullable
-    val createdAt  : Long = System.currentTimeMillis()
+
+    /**
+     * Calendar date of the expense, normalised to local midnight (startOfDay).
+     * Stored as epoch milliseconds. Using DateUtils.startOfDay() ensures the
+     * BETWEEN :startDate AND :endDate SQL filter is timezone-correct.
+     */
+    val date: Long,
+
+    /**
+     * Time the expense/activity started, in "HH:mm" 24-hour format.
+     * Required by the PROG7313 Part 2 rubric.
+     */
+    val startTime: String,
+
+    /**
+     * Time the expense/activity ended, in "HH:mm" 24-hour format.
+     * Must be strictly after startTime (validated in ExpenseViewModel.isEndAfterStart()).
+     * Required by the PROG7313 Part 2 rubric.
+     */
+    val endTime: String,
+
+    /**
+     * Content URI string of the receipt photo, or null if no photo was taken.
+     * Stored as content://com.budgetwise.app.fileprovider/photos/receipt_TIMESTAMP.jpg
+     */
+    val photoUri: String? = null,
+
+    /** Timestamp (epoch ms) when the record was inserted. */
+    val createdAt: Long = System.currentTimeMillis()
 )

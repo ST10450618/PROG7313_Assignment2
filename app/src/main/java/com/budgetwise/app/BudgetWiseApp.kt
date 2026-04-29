@@ -1,19 +1,20 @@
 package com.budgetwise.app
 
 import android.app.Application
-import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
 
 /**
- * Application class annotated with @HiltAndroidApp.
- * This triggers Hilt's code generation and initialises the dependency injection
- * container for the entire app. Without this annotation, @Inject fields in
- * Activities, ViewModels, and Repositories would not be resolved at runtime.
+ * Application entry point for BudgetWise.
+ *
+ * @HiltAndroidApp triggers Hilt's code generation and creates the application-level
+ * DI component (SingletonComponent). This annotation is MANDATORY — without it,
+ * Hilt cannot inject any dependencies anywhere in the app.
+ *
+ * Declared in AndroidManifest.xml:
+ *   android:name=".BudgetWiseApp"
+ *
+ * The Application subclass itself is empty — all initialization is handled by
+ * the Hilt component and the individual modules (DatabaseModule, AppModule, etc.).
  */
 @HiltAndroidApp
-class BudgetWiseApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        Log.d("BudgetWiseApp", "Application initialised — Hilt DI container ready")
-    }
-}
+class BudgetWiseApp : Application()
