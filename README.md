@@ -267,7 +267,7 @@ BUILD SUCCESSFUL
 
 ## Video Demonstration
 
-**Youtube video link: https://youtu.be/YOUR_LINK_HERE**
+**Youtube video link: https://youtu.be/T0qsucMppWo**
 
 The video demonstrates all required features of the BudgetWise prototype
 running on an Android emulator (API 34). 
