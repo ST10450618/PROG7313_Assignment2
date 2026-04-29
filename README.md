@@ -1,6 +1,6 @@
 # BudgetWise 
 ### Smart Financial Management for South African Users
-**PROG7313 / OPSC7311 — Programming 3C / Open Source Coding**
+**PROG7313 / Programming 3C /**
 **The Independent Institute of Education · 2026**
 
 [[CI Build & Tests](https://github.com/ST10450618/PROG7313_Assignment2/blob/main/.github/workflows/build.yml)].
@@ -27,15 +27,12 @@
 This group made limited use of the AI tool **Claude (developed by Anthropic)** strictly for brainstorming ideas 
 and general conceptual understanding.
 
-The AI tool was not used to generate or write any part of the application code or final implementation. 
-All work submitted is our own.
-
-We take full responsibility for the accuracy, integrity, and originality of this project.
+The understanding of the development, design decisions, and implementation was completed independently by the group.
 
 > **Group work distrabution:** 
-> — **Michael** (UI/UX · Auth · Navigation)
-> — **James** (Data Layer · Expenses · Camera)
-> — **Seth** (Goals · Reports · DevOps · Documentation)
+> **Michael** (UI/UX · Auth · Navigation), 
+> **James** (Data Layer · Expenses · Camera), 
+> **Seth** (Goals · Reports · DevOps · Documentation)
 
 ---
 
@@ -43,7 +40,7 @@ We take full responsibility for the accuracy, integrity, and originality of this
 
 BudgetWise is a personal budget tracking Android application developed for
 the South African market. The app helps users track spending habits, set
-monthly spending goals, and visualise where their money goes — all stored
+monthly spending goals, and visualise where their money goes, all stored
 locally using Room (SQLite) for full offline functionality.
 
 The app was designed based on research conducted in Part 1, synthesising
@@ -157,8 +154,8 @@ createdAt        colorHex          amount             year
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/BudgetWise.git
-cd BudgetWise
+git clone https://github.com/ST10450618/PROG7313_Assignment2.git
+cd PROG7313_Assignment2
 
 # 2. Open in Android Studio
 #    File → Open → select the cloned folder
@@ -286,8 +283,8 @@ running on an Android emulator (API 34).
 | 4:30 | View attached receipt photo from the list |
 | 5:00 | Set minimum and maximum monthly goals |
 | 5:30 | View spending status (on-track / over budget indicator) |
-| 6:00 | Reports screen — category totals for a selected period |
-| 6:30 | GitHub Actions — show passing CI build in browser |
+| 6:00 | Reports screen, category totals for a selected period |
+| 6:30 | GitHub Actions, show passing CI build in browser |
 | 7:00 | Closing summary |
 
 ---
@@ -297,7 +294,7 @@ running on an Android emulator (API 34).
 ### Why MVVM?
 MVVM was chosen because it cleanly separates UI rendering (Composables)
 from business logic (ViewModels) and data access (Repositories). This
-means each layer can be tested independently — the unit tests in this
+means each layer can be tested independently, the unit tests in this
 project validate ViewModel logic without touching the database or UI,
 which is why they run in GitHub Actions without an emulator.
 
@@ -307,7 +304,7 @@ and native Kotlin Flow support. This means UI components automatically
 update when data changes without any manual polling or refresh calls.
 
 ### Why SHA-256 for passwords?
-SHA-256 is a one-way cryptographic hash — the original password cannot
+SHA-256 is a one-way cryptographic hash, the original password cannot
 be recovered from the stored hash. This is appropriate for a local
 offline prototype. For a server-side production release, Argon2 or
 bcrypt with per-user salt would be the industry standard.
@@ -333,14 +330,14 @@ on every expense card in the list view.
 
 ## Known Limitations (Prototype Scope)
 
-- **No online sync** — data is stored locally only. Firebase integration
+- **No online sync**, data is stored locally only. Firebase integration
   is planned for the Final PoE submission.
-- **No graphs** — spending trend graphs are a Final PoE requirement and
+- **No graphs**, spending trend graphs are a Final PoE requirement and
   are not included in this prototype.
-- **No gamification badges** — badge system is a Final PoE requirement.
-- **Camera on emulator** — the system camera on the emulator may open
+- **No gamification badges**, badge system is a Final PoE requirement.
+- **Camera on emulator**, the system camera on the emulator may open
   a mock camera interface. On a physical device it opens the real camera.
-- **Single currency** — ZAR only. Multi-currency support is out of scope
+- **Single currency**, ZAR only. Multi-currency support is out of scope
   for this prototype.
 
 ---
