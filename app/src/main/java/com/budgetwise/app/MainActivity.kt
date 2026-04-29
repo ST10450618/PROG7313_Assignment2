@@ -1,13 +1,13 @@
 package com.budgetwise.app
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -21,19 +21,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
-private const val TAG = "MainActivity"
-
 /**
- * Single Activity — all navigation happens via Jetpack Navigation Compose.
- * @AndroidEntryPoint enables Hilt injection into this Activity.
+ * The single Activity for the BudgetWise app (Single Activity Architecture).
  *
- * The start destination is determined synchronously at launch by reading the
- * DataStore session. runBlocking is acceptable here because it executes before
- * setContent is called and the user is not yet interacting with the UI.
+ * @AndroidEntryPoint enables Hilt field injection in this Activity. This annotation
+ * is MANDATORY — without it, @Inject fields are never populated and the app crashes.
+ *
+ * Responsibilities:
+ * 1. Determine the start destination by reading DataStore once on startup (runBlocking).
+ * 2. Set up the Scaffold + NavHost via BudgetWiseNavGraph.
+ * 3. Control bottom bar visibility based on the current route.
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    /**
+     * SessionManager injected by Hilt.
+     * Used in onCreate() to determine whether the user is already logged in.
+     */
     @Inject
     lateinit var sessionManager: SessionManager
 
@@ -41,42 +46,54 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Determine whether the user has an active session
+        /**
+         * Decision 4 (handover doc): runBlocking for start destination.
+         *
+         * We block the main thread for ONE DataStore read before setContent{} runs.
+         * This is ~1–2ms from the in-memory DataStore cache.
+         * Purpose: prevent the Login→Home navigation flicker on every cold start
+         * for an already-authenticated user.
+         *
+         * This is acceptable ONLY here in onCreate(), never in a ViewModel or composable.
+         */
         val startDestination = runBlocking {
             val userId = sessionManager.userId.first()
-            if (userId == SessionManager.NO_USER) {
-                Log.d(TAG, "No active session — routing to Login")
-                Screen.Login.route
-            } else {
-                Log.d(TAG, "Active session found (userId=$userId) — routing to Home")
-                Screen.Home.route
-            }
+            if (userId != SessionManager.NO_USER) Screen.Home.route
+            else Screen.Login.route
         }
 
         setContent {
             BudgetWiseTheme {
                 val navController = rememberNavController()
-                val navBackStackEntry by navController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
 
-                // Routes where the bottom navigation bar must be hidden
+                // Observe current route to control bottom bar visibility
+                val currentBackStack by navController.currentBackStackEntryAsState()
+                val currentRoute = currentBackStack?.destination?.route
+
+                /**
+                 * Bottom bar visibility rules:
+                 * HIDDEN on: Login, Register (auth zone), AddExpense (form zone)
+                 * VISIBLE on: Home, ExpenseList, Categories, Goals, Reports (main zone)
+                 */
                 val bottomBarHiddenRoutes = setOf(
                     Screen.Login.route,
                     Screen.Register.route,
                     Screen.AddExpense.route
                 )
+                val showBottomBar = currentRoute !in bottomBarHiddenRoutes
 
                 Scaffold(
-                    bottomBar = {
-                        if (currentRoute !in bottomBarHiddenRoutes) {
+                    modifier   = Modifier.fillMaxSize(),
+                    bottomBar  = {
+                        if (showBottomBar) {
                             BudgetWiseBottomBar(navController = navController)
                         }
                     }
-                ) { paddingValues ->
+                ) { innerPadding ->
                     BudgetWiseNavGraph(
-                        navController = navController,
-                        startDestination = startDestination,
-                        modifier = Modifier.padding(paddingValues)
+                        navController      = navController,
+                        startDestination   = startDestination,
+                        modifier           = Modifier.padding(innerPadding)
                     )
                 }
             }

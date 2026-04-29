@@ -1,68 +1,153 @@
 package com.budgetwise.app.ui.auth
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetwise.app.data.repository.UserRepository
 import com.budgetwise.app.utils.SessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-private const val TAG = "AuthViewModel"
-
-data class AuthState(
+/**
+ * UI state for authentication screens (Login and Register share this ViewModel).
+ *
+ * @param isLoading     True while the login/register coroutine is running (shows button spinner).
+ * @param errorMsg      Non-null when validation fails or credentials are wrong.
+ * @param isSuccess     True after successful login/register — triggers navigation in the screen.
+ */
+data class AuthUiState(
     val isLoading: Boolean = false,
-    val isSuccess: Boolean = false,
-    val error    : String? = null
+    val errorMsg:  String? = null,
+    val isSuccess: Boolean = false
 )
 
+/**
+ * ViewModel for LoginScreen and RegisterScreen.
+ *
+ * Validates inputs, calls UserRepository, saves session on success.
+ * Both screens observe the same [uiState] flow.
+ *
+ * Injected by Hilt (@HiltViewModel + @Inject constructor).
+ */
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val userRepo: UserRepository,
-    private val session : SessionManager
+    private val userRepository: UserRepository,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(AuthState())
-    val state: StateFlow<AuthState> = _state.asStateFlow()
+    private val _uiState = MutableStateFlow(AuthUiState())
+    val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
+    // -------------------------------------------------------------------------
+    // Login
+    // -------------------------------------------------------------------------
+
+    /**
+     * Attempt to log in with the given credentials.
+     *
+     * Validations (in order):
+     *   1. Username must not be blank.
+     *   2. Password must not be blank.
+     *
+     * On success: saves session via SessionManager, sets isSuccess=true.
+     * On failure: sets errorMsg with an appropriate message.
+     */
     fun login(username: String, password: String) {
-        if (username.isBlank()) { _state.value = AuthState(error = "Username is required"); return }
-        if (password.isBlank()) { _state.value = AuthState(error = "Password is required"); return }
+        // Validation 1
+        if (username.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Username is required") }
+            return
+        }
+        // Validation 2
+        if (password.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Password is required") }
+            return
+        }
+
+        _uiState.update { it.copy(isLoading = true, errorMsg = null) }
 
         viewModelScope.launch {
-            _state.value = AuthState(isLoading = true)
-            Log.d(TAG, "Login attempt: $username")
-            val user = userRepo.login(username.trim(), password)
+            val user = userRepository.login(username.trim(), password)
             if (user != null) {
-                session.save(user.id, user.username)
-                _state.value = AuthState(isSuccess = true)
+                sessionManager.save(user.id, user.username)
+                _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
-                _state.value = AuthState(error = "Incorrect username or password")
+                _uiState.update {
+                    it.copy(isLoading = false, errorMsg = "Invalid username or password")
+                }
             }
         }
     }
 
-    fun register(username: String, password: String, confirm: String) {
-        when {
-            username.isBlank()       -> { _state.value = AuthState(error = "Username is required"); return }
-            username.length < 4      -> { _state.value = AuthState(error = "Username must be at least 4 characters"); return }
-            password.length < 6      -> { _state.value = AuthState(error = "Password must be at least 6 characters"); return }
-            password != confirm      -> { _state.value = AuthState(error = "Passwords do not match"); return }
+    // -------------------------------------------------------------------------
+    // Register
+    // -------------------------------------------------------------------------
+
+    /**
+     * Attempt to register a new account.
+     *
+     * Validations (in order):
+     *   1. Username must not be blank.
+     *   2. Username must be at least 3 characters.
+     *   3. Password must not be blank.
+     *   4. Password must be at least 6 characters.
+     *   5. Password and confirm password must match.
+     *
+     * On success: saves session via SessionManager, sets isSuccess=true.
+     * On failure: sets errorMsg with the first failing validation message.
+     */
+    fun register(username: String, password: String, confirmPassword: String) {
+        // Validation 1
+        if (username.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Username is required") }
+            return
         }
+        // Validation 2
+        if (username.trim().length < 3) {
+            _uiState.update { it.copy(errorMsg = "Username must be at least 3 characters") }
+            return
+        }
+        // Validation 3
+        if (password.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Password is required") }
+            return
+        }
+        // Validation 4
+        if (password.length < 6) {
+            _uiState.update { it.copy(errorMsg = "Password must be at least 6 characters") }
+            return
+        }
+        // Validation 5
+        if (password != confirmPassword) {
+            _uiState.update { it.copy(errorMsg = "Passwords do not match") }
+            return
+        }
+
+        _uiState.update { it.copy(isLoading = true, errorMsg = null) }
+
         viewModelScope.launch {
-            _state.value = AuthState(isLoading = true)
-            Log.d(TAG, "Register attempt: $username")
-            val id = userRepo.register(username.trim(), password)
-            if (id > 0) {
-                session.save(id, username.trim())
-                _state.value = AuthState(isSuccess = true)
+            val userId = userRepository.register(username.trim(), password)
+            if (userId > 0L) {
+                sessionManager.save(userId, username.trim())
+                _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
-                _state.value = AuthState(error = "Username already taken — please choose another")
+                _uiState.update {
+                    it.copy(isLoading = false, errorMsg = "Username already taken. Please choose another.")
+                }
             }
         }
     }
 
-    fun clearError() { _state.value = _state.value.copy(error = null) }
+    // -------------------------------------------------------------------------
+    // Utility
+    // -------------------------------------------------------------------------
+
+    /** Clear the current error message (called when user starts typing again). */
+    fun clearError() {
+        _uiState.update { it.copy(errorMsg = null) }
+    }
 }

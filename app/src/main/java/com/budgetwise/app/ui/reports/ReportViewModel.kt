@@ -14,8 +14,6 @@ import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
 /**
- * TODO (Seth): Complete the Report screen logic.
- *
  * [CategoryReportRow] is the display model for each row in the report list.
  * [categoryRows] maps raw CategoryTotal DAOs to enriched rows with category
  * name/colour and percentage of the period total.
@@ -39,6 +37,7 @@ class ReportViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _filter = MutableStateFlow(ReportFilterState())
+    val filter: StateFlow<ReportFilterState> = _filter.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val periodTotal: StateFlow<Double> = session.userId.flatMapLatest { uid ->

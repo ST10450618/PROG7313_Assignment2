@@ -13,16 +13,28 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+// =============================================================================
+// State models
+// =============================================================================
+
+/** UI state for the Goals form. */
+data class GoalsUiState(
+    val error  : String? = null,
+    val isSaved: Boolean = false
+)
+
 /**
- * TODO (Seth): Complete the Goals screen logic.
- *
- * SpendingStatus drives the colour-coded status card in GoalsScreen:
- *  NO_GOAL   → grey  "Set a goal to track your spending"
- *  UNDER_MIN → YellowHighlight "You're spending less than your minimum"
- *  ON_TRACK  → TealPrimary    "You're on track!"
- *  OVER_MAX  → CoralAlert     "You've exceeded your budget"
+ * Colour-coded spending status, drives GoalStatusCard in GoalsScreen:
+ *  NO_GOAL   → grey   "No goal set yet"
+ *  UNDER_MIN → yellow "Spending below minimum"
+ *  ON_TRACK  → teal   "On track!"
+ *  OVER_MAX  → coral  "Over budget!"
  */
 enum class SpendingStatus { NO_GOAL, UNDER_MIN, ON_TRACK, OVER_MAX }
+
+// =============================================================================
+// ViewModel
+// =============================================================================
 
 @HiltViewModel
 class GoalsViewModel @Inject constructor(
@@ -31,10 +43,14 @@ class GoalsViewModel @Inject constructor(
     private val session    : SessionManager
 ) : ViewModel() {
 
-    private val _uiMessage = MutableStateFlow<String?>(null)
-    private val _isSaved   = MutableStateFlow(false)
-    val uiMessage: StateFlow<String?> = _uiMessage.asStateFlow()
-    val isSaved  : StateFlow<Boolean> = _isSaved.asStateFlow()
+    private val _uiState = MutableStateFlow(GoalsUiState())
+    val uiState: StateFlow<GoalsUiState> = _uiState.asStateFlow()
+
+    // Convenience aliases used by GoalsScreen
+    val uiMessage: StateFlow<String?> = _uiState.map { it.error }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val isSaved: StateFlow<Boolean> = _uiState.map { it.isSaved }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val currentGoal: StateFlow<MonthlyGoal?> = session.userId.flatMapLatest { uid ->
@@ -54,34 +70,51 @@ class GoalsViewModel @Inject constructor(
 
     val spendingStatus: StateFlow<SpendingStatus> = combine(currentGoal, monthTotal) { goal, total ->
         when {
-            goal == null      -> SpendingStatus.NO_GOAL
+            goal == null         -> SpendingStatus.NO_GOAL
             total < goal.minGoal -> SpendingStatus.UNDER_MIN
             total > goal.maxGoal -> SpendingStatus.OVER_MAX
-            else              -> SpendingStatus.ON_TRACK
+            else                 -> SpendingStatus.ON_TRACK
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SpendingStatus.NO_GOAL)
 
+    /**
+     * Validates and persists the monthly goal.
+     *
+     * Validation order (matches GoalsViewModelTest expectations):
+     *  1. min null or negative → error
+     *  2. max null or negative → error
+     *  3. max ≤ min            → "Maximum must be greater than minimum"
+     */
     fun saveGoal(minStr: String, maxStr: String) {
-        // TODO (Seth): Validation must match GoalsViewModelTest:
-        //  - blank min → error not null
-        //  - max <= min → "Maximum must be greater than minimum"
-        //  - negative min → error not null
         val min = minStr.toDoubleOrNull()
         val max = maxStr.toDoubleOrNull()
         when {
-            min == null || min < 0 -> { _uiMessage.value = "Enter a valid minimum goal amount"; return }
-            max == null            -> { _uiMessage.value = "Enter a valid maximum goal amount"; return }
-            max <= min             -> { _uiMessage.value = "Maximum must be greater than minimum"; return }
+            min == null || min < 0.0 -> {
+                _uiState.value = GoalsUiState(error = "Enter a valid minimum amount (e.g. 500.00)")
+                return
+            }
+            max == null || max < 0.0 -> {
+                _uiState.value = GoalsUiState(error = "Enter a valid maximum amount (e.g. 3000.00)")
+                return
+            }
+            max <= min -> {
+                _uiState.value = GoalsUiState(error = "Maximum must be greater than minimum")
+                return
+            }
         }
         viewModelScope.launch {
             val uid = session.userId.first()
             goalRepo.upsert(uid, DateUtils.currentMonth(), DateUtils.currentYear(), min!!, max!!)
-            _isSaved.value = true
-            _uiMessage.value = "Goal saved for ${DateUtils.formatMonthYear(
-                DateUtils.currentMonth(), DateUtils.currentYear()
-            )}"
+            _uiState.value = GoalsUiState(
+                isSaved = true,
+                error   = "Goal saved for ${DateUtils.formatMonthYear(
+                    DateUtils.currentMonth(), DateUtils.currentYear()
+                )}"
+            )
         }
     }
 
-    fun clearMessages() { _uiMessage.value = null; _isSaved.value = false }
+    fun clearMessages() {
+        _uiState.value = GoalsUiState(error = null, isSaved = false)
+    }
 }

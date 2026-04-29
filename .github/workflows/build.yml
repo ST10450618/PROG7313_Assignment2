@@ -1,0 +1,113 @@
+# ============================================================
+#  BudgetWise — GitHub Actions CI Pipeline
+#  PROG7313 / OPSC7311 — Part 2 Automated Build & Test
+# ============================================================
+#
+# This workflow runs on every push and pull request to main.
+# It validates that:
+#   1. The Kotlin codebase compiles cleanly (assembleDebug)
+#   2. All JVM unit tests pass (testDebugUnitTest)
+#   3. The debug APK is archived as a downloadable artifact
+#
+# The Ubuntu runner is sufficient because our unit tests are
+# pure JVM (no Android emulator required). Instrumented tests
+# (androidTest) are excluded from this workflow intentionally —
+# they require an emulator which adds ~15 minutes to CI time
+# and is out of scope for prototype submission.
+#
+# Reference:
+#   https://github.com/marketplace/actions/automated-build-android-app-with-github-action
+#   https://github.com/IMAD5112/Github-actions/blob/main/.github/workflows/build.yml
+
+name: BudgetWise CI — Build & Unit Tests
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+# Cancel in-progress runs for the same branch to save minutes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build APK & Run Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Checkout source code ──────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Set up JDK 17 ─────────────────────────────────────────
+      # AGP 8.3.x requires JDK 17. Temurin is the Eclipse Foundation's
+      # free, production-grade OpenJDK distribution.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # ── Step 3: Grant Gradle wrapper execute permission ────────────────
+      # The gradlew file must be executable on Linux; Windows commits
+      # may not preserve the Unix execute bit.
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x gradlew
+
+      # ── Step 4: Cache Gradle dependencies ─────────────────────────────
+      # Caching ~/.gradle/caches reduces dependency download time from
+      # ~3 minutes to ~20 seconds on subsequent runs.
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # ── Step 5: Run JVM unit tests ────────────────────────────────────
+      # Runs ExpenseViewModelTest, GoalsViewModelTest, HashUtilsTest.
+      # --no-daemon prevents orphan Gradle daemon processes in CI.
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
+      # ── Step 6: Upload test results ───────────────────────────────────
+      # Even on failure, upload the HTML report so the marker can inspect
+      # which tests passed or failed without re-running locally.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 14
+
+      # ── Step 7: Assemble debug APK ────────────────────────────────────
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # ── Step 8: Archive APK ───────────────────────────────────────────
+      # The APK is uploaded as a GitHub Actions artifact so the marker
+      # can download and install it without building from source.
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BudgetWise-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      # ── Step 9: Build summary ─────────────────────────────────────────
+      - name: Print build summary
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ✅  BudgetWise CI Complete"
+          echo "  Branch : ${{ github.ref_name }}"
+          echo "  Commit : ${{ github.sha }}"
+          echo "  Trigger: ${{ github.event_name }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
