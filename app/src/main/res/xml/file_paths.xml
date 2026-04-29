@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!--
-        external-files-path: Points to getExternalFilesDir() — app-private external storage.
-        This is where CameraX saves captured receipt photos. The path attribute "." means
-        the root of that directory, so any subdirectory (e.g. "photos/") will be covered.
-    -->
-    <external-files-path name="photos" path="." />
-</paths>
