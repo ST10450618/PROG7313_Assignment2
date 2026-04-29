@@ -74,7 +74,7 @@ the best features from **YNAB**, **Wallet by BudgetBakers**, and
 | 1 | User registration with SHA-256 password hashing | Complete | Register |
 | 2 | User login with session persistence (DataStore) | Complete | Login |
 | 3 | Create expense categories with custom colours | Complete | Categories |
-| 4 | Add expense — amount, description, date, **start time**, **end time**, category | Complete | Add Expense |
+| 4 | Add expense, amount, description, date, **start time**, **end time**, category | Complete | Add Expense |
 | 5 | Optional receipt photo attached to expense (CameraX) | Complete | Add Expense |
 | 6 | Set minimum AND maximum monthly spending goals | Complete | Goals |
 | 7 | View list of expenses during a user-selectable period | Complete | Expense List |
@@ -224,7 +224,7 @@ The CI pipeline runs **13 JVM unit tests** covering:
 
 ## Running the Tests
 
-### Locally (JVM — no emulator needed)
+### Locally (JVM, no emulator needed)
 ```bash
 ./gradlew testDebugUnitTest
 ```
@@ -272,7 +272,7 @@ running on an Android emulator (API 34).
 ### Timestamp Guide
 | Timestamp | Feature Shown |
 |---|---|
-| 0:00 | App introduction — BudgetWise branding and overview |
+| 0:00 | App introduction, BudgetWise branding and overview |
 | 0:30 | Register a new account |
 | 1:00 | Login with existing credentials |
 | 1:30 | Home dashboard walkthrough |
