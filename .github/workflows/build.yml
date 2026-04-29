@@ -106,7 +106,7 @@ jobs:
       - name: Print build summary
         run: |
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ✅  BudgetWise CI Complete"
+          echo "  BudgetWise CI Complete"
           echo "  Branch : ${{ github.ref_name }}"
           echo "  Commit : ${{ github.sha }}"
           echo "  Trigger: ${{ github.event_name }}"
