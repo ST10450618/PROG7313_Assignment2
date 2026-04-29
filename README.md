@@ -3,7 +3,7 @@
 **PROG7313 / OPSC7311 — Programming 3C / Open Source Coding**
 **The Independent Institute of Education · 2026**
 
-[![CI Build & Tests](https://github.com/ST10450618/PROG7313_Assignment2/blob/main/.github/workflows/build.yml)].
+[[CI Build & Tests](https://github.com/ST10450618/PROG7313_Assignment2/blob/main/.github/workflows/build.yml)].
 
 ---
 ## Table of Contents
