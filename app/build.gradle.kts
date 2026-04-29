@@ -40,6 +40,9 @@ android {
 
     kotlinOptions {
         jvmTarget = "1.8"
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
+        )
     }
 
     buildFeatures {
@@ -64,6 +67,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.compose)
     implementation(libs.androidx.activity.compose)
+    implementation("com.google.android.material:material:1.12.0")
 
     // Compose BOM (manages all compose/* versions)
     implementation(platform(libs.androidx.compose.bom))

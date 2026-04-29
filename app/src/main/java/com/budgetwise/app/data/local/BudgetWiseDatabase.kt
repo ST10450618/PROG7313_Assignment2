@@ -25,7 +25,7 @@ import com.budgetwise.app.data.local.entity.User
  */
 @Database(
     entities  = [User::class, Category::class, Expense::class, MonthlyGoal::class],
-    version   = 1,
+    version   = 2,
     exportSchema = false
 )
 abstract class BudgetWiseDatabase : RoomDatabase() {
