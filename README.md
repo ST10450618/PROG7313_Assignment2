@@ -1,4 +1,4 @@
-# BudgetWise 💰
+# BudgetWise 
 ### Smart Financial Management for South African Users
 **PROG7313 / OPSC7311 — Programming 3C / Open Source Coding**
 **The Independent Institute of Education · 2026**
