@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)   // Firebase / Google Services
 }
 
 android {
@@ -101,6 +102,11 @@ dependencies {
 
     // DataStore (session management)
     implementation(libs.datastore.preferences)
+
+    // Firebase BOM — manages all Firebase library versions
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.firestore)   // online database (final PoE)
+    implementation(libs.firebase.auth)        // Firebase Auth for online user sync
 
     // Unit Tests (JVM)
     testImplementation(libs.junit)

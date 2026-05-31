@@ -1,175 +1,195 @@
 package com.budgetwise.app.ui.expense
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetwise.app.data.local.entity.Category
 import com.budgetwise.app.data.local.entity.Expense
 import com.budgetwise.app.data.repository.CategoryRepository
 import com.budgetwise.app.data.repository.ExpenseRepository
+import com.budgetwise.app.data.repository.FirestoreRepository
 import com.budgetwise.app.utils.DateUtils
 import com.budgetwise.app.utils.SessionManager
+import com.budgetwise.app.utils.SessionManager.Companion.NO_USER
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import javax.inject.Inject
 
-private const val TAG = "ExpenseViewModel"
+/** UI state for the Add Expense form. */
+data class ExpenseUiState(
+    val isLoading: Boolean = false,
+    val errorMsg:  String? = null,
+    val isSaved:   Boolean = false
+)
+
+/**
+ * Filter state for the ExpenseListScreen date range picker.
+ * Defaults to the current calendar month.
+ */
+data class FilterState(
+    val startMs: Long = DateUtils.startOfMonth(DateUtils.currentMonth(), DateUtils.currentYear()),
+    val endMs:   Long = DateUtils.endOfMonth(DateUtils.currentMonth(), DateUtils.currentYear())
+)
 
 /**
  * Shared ViewModel for AddExpenseScreen and ExpenseListScreen.
  *
- * A single ViewModel is intentionally shared so that the category list and
- * session context are loaded once and reused across both screens, avoiding
- * redundant database reads. The [filteredExpenses] flow is driven by the
- * [filterState] StateFlow, meaning any date-range change automatically
- * triggers a new Room query without imperative refresh calls.
+ * Updated for Final PoE:
+ * - Calls FirestoreRepository.saveExpense() after every successful Room insert
+ *   (Online database requirement — data stored in Firestore for multi-device access).
+ * - Calls FirestoreRepository.deleteExpense() after Room delete.
  */
-data class ExpenseUiState(
-    val isLoading  : Boolean = false,
-    val isSaved    : Boolean = false,
-    val error      : String? = null,
-    val successMsg : String? = null
-)
-
-data class FilterState(
-    val startMs: Long = DateUtils.startOfMonth(DateUtils.currentMonth(), DateUtils.currentYear()),
-    val endMs  : Long = DateUtils.endOfMonth(DateUtils.currentMonth(), DateUtils.currentYear())
-)
-
 @HiltViewModel
 class ExpenseViewModel @Inject constructor(
-    private val expenseRepo : ExpenseRepository,
-    private val categoryRepo: CategoryRepository,
-    private val session     : SessionManager
+    private val expenseRepository:  ExpenseRepository,
+    private val categoryRepository: CategoryRepository,
+    private val sessionManager:     SessionManager,
+    private val firestoreRepo:      FirestoreRepository   // Final PoE: Firestore sync
 ) : ViewModel() {
 
-    private val _ui = MutableStateFlow(ExpenseUiState())
-    val uiState: StateFlow<ExpenseUiState> = _ui.asStateFlow()
+    private val _uiState = MutableStateFlow(ExpenseUiState())
+    val uiState: StateFlow<ExpenseUiState> = _uiState.asStateFlow()
 
-    // ── Period filter for ExpenseListScreen ───────────────────────────────
-    private val _filter = MutableStateFlow(FilterState())
-    val filterState: StateFlow<FilterState> = _filter.asStateFlow()
+    private val _filterState = MutableStateFlow(FilterState())
+    val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
 
-    /** Live list of categories for the current user — drives the category picker. */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val categories: StateFlow<List<Category>> = session.userId
-        .flatMapLatest { uid ->
-            if (uid == SessionManager.NO_USER) flowOf(emptyList())
-            else categoryRepo.getForUser(uid)
+    private val userIdFlow = sessionManager.userId
+
+    /** Reactive list of user's categories (for the dropdown in AddExpenseScreen). */
+    val categories: StateFlow<List<Category>> = userIdFlow
+        .flatMapLatest { userId ->
+            if (userId == NO_USER) flowOf(emptyList())
+            else categoryRepository.getForUser(userId)
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Reactive expense list filtered by [filterState]. */
+    val filteredExpenses = combine(userIdFlow, _filterState) { userId, filter ->
+        Pair(userId, filter)
+    }.flatMapLatest { (userId, filter) ->
+        if (userId == NO_USER) flowOf(emptyList())
+        else expenseRepository.getForPeriod(userId, filter.startMs, filter.endMs)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Reactive total for the current filter period. */
+    val periodTotal = combine(userIdFlow, _filterState) { userId, filter ->
+        Pair(userId, filter)
+    }.flatMapLatest { (userId, filter) ->
+        if (userId == NO_USER) flowOf(0.0)
+        else expenseRepository.getTotalForPeriod(userId, filter.startMs, filter.endMs)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.0)
+
+    // -------------------------------------------------------------------------
+    // Save Expense — 6 ordered validations + Firestore sync
+    // -------------------------------------------------------------------------
 
     /**
-     * Expense list — automatically recomputed when [filterState] changes.
-     * flatMapLatest cancels the previous Flow collection whenever a new filter
-     * or userId is emitted, preventing stale data from appearing in the UI.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val filteredExpenses: StateFlow<List<Expense>> = combine(session.userId, _filter) { uid, filter ->
-        Pair(uid, filter)
-    }.flatMapLatest { (uid, filter) ->
-        if (uid == SessionManager.NO_USER) flowOf(emptyList())
-        else expenseRepo.getForPeriod(uid, filter.startMs, filter.endMs)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // ── Period total (shown in list header) ───────────────────────────────
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val periodTotal: StateFlow<Double> = combine(session.userId, _filter) { uid, f ->
-        Pair(uid, f)
-    }.flatMapLatest { (uid, f) ->
-        if (uid == SessionManager.NO_USER) flowOf(0.0)
-        else expenseRepo.getTotalForPeriod(uid, f.startMs, f.endMs)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
-
-    // ── Filter update ─────────────────────────────────────────────────────
-    fun updateFilter(startMs: Long, endMs: Long) {
-        Log.d(TAG, "Filter updated: ${DateUtils.formatDate(startMs)} → ${DateUtils.formatDate(endMs)}")
-        _filter.value = FilterState(startMs = startMs, endMs = DateUtils.endOfDay(endMs))
-    }
-
-    /**
-     * Saves a new expense entry to the Room database.
+     * Validate and insert a new expense into Room, then sync to Firestore.
      *
-     * Validation is performed here (ViewModel layer) rather than in the UI so
-     * that the same rules apply regardless of how the screen is invoked.
+     * Validations (in order):
+     *   1. Amount must be a valid decimal number.
+     *   2. Amount must be > 0.
+     *   3. Description must not be blank.
+     *   4. Start time must not be blank.
+     *   5. End time must be strictly AFTER start time.
+     *   6. Category must be selected (non-null).
      *
-     * RUBRIC NOTE: date, startTime, endTime, description, and categoryId are all
-     * validated — these are explicitly listed as mandatory in the marking rubric.
+     * On success: inserts to Room → syncs to Firestore → sets isSaved=true.
      */
     fun saveExpense(
-        amount     : String,
+        amountStr:   String,
         description: String,
-        dateMs     : Long,
-        startTime  : String,
-        endTime    : String,
-        categoryId : Long?,
-        photoUri   : String?
+        dateMs:      Long,
+        startTime:   String,
+        endTime:     String,
+        categoryId:  Long?,
+        photoUri:    String?
     ) {
-        // ── Input validation ──────────────────────────────────────────────
-        val amountDouble = amount.toDoubleOrNull()
-        when {
-            amountDouble == null || amountDouble <= 0 ->
-            { _ui.value = ExpenseUiState(error = "Please enter a valid amount greater than R0.00"); return }
-            description.isBlank() ->
-            { _ui.value = ExpenseUiState(error = "Description is required"); return }
-            startTime.isBlank() ->
-            { _ui.value = ExpenseUiState(error = "Start time is required"); return }
-            endTime.isBlank() ->
-            { _ui.value = ExpenseUiState(error = "End time is required"); return }
-            !isEndAfterStart(startTime, endTime) ->
-            { _ui.value = ExpenseUiState(error = "End time must be after start time"); return }
-            categoryId == null ->
-            { _ui.value = ExpenseUiState(error = "Please select a category"); return }
+        val amount = amountStr.toDoubleOrNull()
+        if (amount == null) {
+            _uiState.update { it.copy(errorMsg = "Please enter a valid amount (e.g. 125.00)") }
+            return
+        }
+        if (amount <= 0.0) {
+            _uiState.update { it.copy(errorMsg = "Amount must be a valid amount greater than 0") }
+            return
+        }
+        if (description.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Description is required") }
+            return
+        }
+        if (startTime.isBlank()) {
+            _uiState.update { it.copy(errorMsg = "Please select a start time") }
+            return
+        }
+        if (endTime.isBlank() || !isEndAfterStart(startTime, endTime)) {
+            _uiState.update { it.copy(errorMsg = "End time must be after start time") }
+            return
+        }
+        if (categoryId == null) {
+            _uiState.update { it.copy(errorMsg = "Please select a category") }
+            return
         }
 
+        _uiState.update { it.copy(isLoading = true, errorMsg = null) }
+
         viewModelScope.launch {
-            _ui.value = ExpenseUiState(isLoading = true)
-            val uid = session.userId.first()
-            val id  = expenseRepo.add(
-                Expense(
-                    userId      = uid,
-                    categoryId  = categoryId,
-                    amount      = amountDouble!!,
-                    description = description.trim(),
-                    date        = DateUtils.startOfDay(dateMs),
-                    startTime   = startTime,
-                    endTime     = endTime,
-                    photoUri    = photoUri
-                )
+            val userId = sessionManager.userId.first()
+            if (userId == NO_USER) {
+                _uiState.update { it.copy(isLoading = false, errorMsg = "Session expired. Please log in again.") }
+                return@launch
+            }
+
+            val expense = Expense(
+                userId      = userId,
+                categoryId  = categoryId,
+                amount      = amount,
+                description = description.trim(),
+                date        = DateUtils.startOfDay(dateMs),
+                startTime   = startTime,
+                endTime     = endTime,
+                photoUri    = photoUri,
+                createdAt   = System.currentTimeMillis()
             )
-            if (id > 0) {
-                Log.d(TAG, "Expense saved id=$id amount=R$amountDouble")
-                _ui.value = ExpenseUiState(isSaved = true, successMsg = "Expense saved!")
-            } else {
-                _ui.value = ExpenseUiState(error = "Failed to save expense — please try again")
+
+            // 1. Insert into local Room database (source of truth)
+            val newId = expenseRepository.add(expense)
+
+            // 2. Sync to Firestore (online backup — Final PoE requirement)
+            // Use the auto-generated id from Room for the Firestore document key
+            firestoreRepo.saveExpense(userId, expense.copy(id = newId))
+
+            _uiState.update { it.copy(isLoading = false, isSaved = true) }
+        }
+    }
+
+    /** Delete an expense from Room and remove from Firestore. */
+    fun deleteExpense(expenseId: Long) {
+        viewModelScope.launch {
+            val userId = sessionManager.userId.first()
+            expenseRepository.delete(expenseId)
+            // Sync deletion to Firestore
+            if (userId != NO_USER) {
+                firestoreRepo.deleteExpense(userId, expenseId)
             }
         }
     }
 
-    fun deleteExpense(expense: Expense) = viewModelScope.launch {
-        Log.d(TAG, "Deleting expense id=${expense.id}")
-        expenseRepo.delete(expense)
-        _ui.value = ExpenseUiState(successMsg = "Expense deleted")
+    /** Update the date range filter for the expense list. */
+    fun updateFilter(startMs: Long, endMs: Long) {
+        _filterState.update { it.copy(startMs = startMs, endMs = endMs) }
     }
 
-    fun clearMessages() { _ui.value = ExpenseUiState() }
+    /** Reset the form state (call after successfully saving or when navigating back). */
+    fun clearMessages() {
+        _uiState.update { it.copy(errorMsg = null, isSaved = false) }
+    }
 
-    /**
-     * Compares two "HH:mm" time strings.
-     * Returns true only when endTime is strictly after startTime.
-     * This prevents nonsensical entries like start=10:30, end=09:00.
-     */
-    private fun isEndAfterStart(start: String, end: String): Boolean {
+    private fun isEndAfterStart(startTime: String, endTime: String): Boolean {
         return try {
-            val (sh, sm) = start.split(":").map { it.toInt() }
-            val (eh, em) = end.split(":").map { it.toInt() }
-            (eh * 60 + em) > (sh * 60 + sm)
-        } catch (e: Exception) {
-            Log.e(TAG, "Time parse error: ${e.message}")
-            false
-        }
+            val (startH, startM) = startTime.split(":").map { it.toInt() }
+            val (endH,   endM)   = endTime.split(":").map { it.toInt() }
+            (endH * 60 + endM) > (startH * 60 + startM)
+        } catch (e: Exception) { false }
     }
 }
