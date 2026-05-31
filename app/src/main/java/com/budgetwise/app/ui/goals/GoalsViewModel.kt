@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetwise.app.data.local.entity.MonthlyGoal
 import com.budgetwise.app.data.repository.ExpenseRepository
+import com.budgetwise.app.data.repository.FirestoreRepository
 import com.budgetwise.app.data.repository.GoalRepository
 import com.budgetwise.app.utils.DateUtils
 import com.budgetwise.app.utils.SessionManager
@@ -36,11 +37,15 @@ enum class SpendingStatus { NO_GOAL, UNDER_MIN, ON_TRACK, OVER_MAX }
 // ViewModel
 // =============================================================================
 
+/**
+ * GoalsViewModel — updated for Final PoE to sync goals to Firestore.
+ */
 @HiltViewModel
 class GoalsViewModel @Inject constructor(
-    private val goalRepo   : GoalRepository,
-    private val expenseRepo: ExpenseRepository,
-    private val session    : SessionManager
+    private val goalRepo     : GoalRepository,
+    private val expenseRepo  : ExpenseRepository,
+    private val session      : SessionManager,
+    private val firestoreRepo: FirestoreRepository   // Final PoE: online sync
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GoalsUiState())
@@ -78,7 +83,7 @@ class GoalsViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SpendingStatus.NO_GOAL)
 
     /**
-     * Validates and persists the monthly goal.
+     * Validates and persists the monthly goal to Room, then syncs to Firestore.
      *
      * Validation order (matches GoalsViewModelTest expectations):
      *  1. min null or negative → error
@@ -104,7 +109,20 @@ class GoalsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             val uid = session.userId.first()
+
+            // 1. Upsert into local Room database
             goalRepo.upsert(uid, DateUtils.currentMonth(), DateUtils.currentYear(), min!!, max!!)
+
+            // 2. Sync to Firestore (Final PoE — online database requirement)
+            val goal = MonthlyGoal(
+                userId   = uid,
+                month    = DateUtils.currentMonth(),
+                year     = DateUtils.currentYear(),
+                minGoal  = min,
+                maxGoal  = max
+            )
+            firestoreRepo.saveGoal(uid, goal)
+
             _uiState.value = GoalsUiState(
                 isSaved = true,
                 error   = "Goal saved for ${DateUtils.formatMonthYear(
