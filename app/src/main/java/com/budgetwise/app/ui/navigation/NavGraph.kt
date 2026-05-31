@@ -29,28 +29,24 @@ import com.budgetwise.app.ui.expense.ExpenseListScreen
 import com.budgetwise.app.ui.goals.GoalsScreen
 import com.budgetwise.app.ui.home.HomeScreen
 import com.budgetwise.app.ui.reports.ReportScreen
+import com.budgetwise.app.ui.streak.StreakScreen
+import com.budgetwise.app.ui.tips.SmartTipsScreen
 import com.budgetwise.app.ui.theme.OnBackgroundDark
 import com.budgetwise.app.ui.theme.TealPrimary
 import com.budgetwise.app.ui.theme.TextMuted
 
 /**
- * Root NavHost that wires all 8 screens to their route strings.
+ * Root NavHost — wires all screens to their route strings.
  *
- * Back stack rules (from handover doc Section 7):
- * - Login → Home: popUpTo(Login) inclusive=true → back exits app
- * - Register → Home: popUpTo(Login) inclusive=true → clears both auth screens
- * - Logout: popUpTo(0) inclusive=true → clears entire stack
- * - Bottom bar tabs: saveState + restoreState + launchSingleTop
- *
- * @param navController  The NavHostController from MainActivity.
- * @param startDestination  "login" or "home" determined by session check in MainActivity.
- * @param modifier  Padding from Scaffold (accounts for bottom nav bar height).
+ * Final PoE additions:
+ *  - Streak screen (Own Feature 1) — accessible from HomeScreen
+ *  - SmartTips screen (Own Feature 2) — accessible from HomeScreen
  */
 @Composable
 fun BudgetWiseNavGraph(
-    navController: NavHostController,
-    startDestination: String,
-    modifier: Modifier = Modifier
+    navController    : NavHostController,
+    startDestination : String,
+    modifier         : Modifier = Modifier
 ) {
     NavHost(
         navController    = navController,
@@ -75,34 +71,24 @@ fun BudgetWiseNavGraph(
             RegisterScreen(
                 onRegisterSuccess = {
                     navController.navigate(Screen.Home.route) {
-                        // Clear both Login AND Register from back stack
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
         // MAIN ZONE
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToAddExpense = {
-                    navController.navigate(Screen.AddExpense.route)
-                },
-                onNavigateToExpenses = {
-                    navController.navigate(Screen.ExpenseList.route)
-                },
-                onNavigateToCategories = {
-                    navController.navigate(Screen.Categories.route)
-                },
-                onNavigateToGoals = {
-                    navController.navigate(Screen.Goals.route)
-                },
+                onNavigateToAddExpense = { navController.navigate(Screen.AddExpense.route) },
+                onNavigateToExpenses   = { navController.navigate(Screen.ExpenseList.route) },
+                onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
+                onNavigateToGoals      = { navController.navigate(Screen.Goals.route) },
+                onNavigateToStreak     = { navController.navigate(Screen.Streak.route) },
+                onNavigateToSmartTips  = { navController.navigate(Screen.SmartTips.route) },
                 onLogout = {
                     navController.navigate(Screen.Login.route) {
-                        // Clear entire back stack on logout
                         popUpTo(0) { inclusive = true }
                     }
                 }
@@ -110,97 +96,66 @@ fun BudgetWiseNavGraph(
         }
 
         composable(Screen.ExpenseList.route) {
-            ExpenseListScreen(
-                onNavigateToAddExpense = {
-                    navController.navigate(Screen.AddExpense.route)
-                }
-            )
+            ExpenseListScreen(onNavigateToAddExpense = { navController.navigate(Screen.AddExpense.route) })
         }
 
-        composable(Screen.Categories.route) {
-            CategoryScreen()
-        }
-
-        composable(Screen.Goals.route) {
-            GoalsScreen()
-        }
-
-        composable(Screen.Reports.route) {
-            ReportScreen()
-        }
+        composable(Screen.Categories.route) { CategoryScreen() }
+        composable(Screen.Goals.route)      { GoalsScreen() }
+        composable(Screen.Reports.route)    { ReportScreen() }
 
         // FORM ZONE
         composable(Screen.AddExpense.route) {
-            AddExpenseScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
+            AddExpenseScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        // OWN FEATURES — Final PoE
+        composable(Screen.Streak.route) {
+            StreakScreen()
+        }
+
+        composable(Screen.SmartTips.route) {
+            SmartTipsScreen()
         }
     }
 }
 
 // =============================================================================
-// Bottom Navigation Bar
+// Bottom Navigation Bar (unchanged — 5 main tabs)
 // =============================================================================
 
-/**
- * Data class representing a single bottom navigation tab item.
- */
 private data class BottomNavItem(
     val screen: Screen,
-    val label: String,
-    val icon: @Composable () -> Unit
+    val label : String,
+    val icon  : @Composable () -> Unit
 )
 
-/**
- * Material3 NavigationBar with 5 tabs for the main zone.
- *
- * Tab configuration:
- *   1. Home         — house icon
- *   2. Expenses     — list icon
- *   3. Categories   — category icon
- *   4. Goals        — track changes icon
- *   5. Reports      — bar chart icon
- *
- * Navigation behaviour:
- *   - saveState = true, restoreState = true: preserves scroll/state on tab switch
- *   - launchSingleTop = true: avoids duplicate destinations on repeated tap
- *   - popUpTo(startDestination) { saveState = true }: keeps back stack clean
- */
 @Composable
 fun BudgetWiseBottomBar(navController: NavController) {
     val navItems = listOf(
-        BottomNavItem(Screen.Home,        "Home")       { Icon(Icons.Filled.Home,         contentDescription = "Home") },
-        BottomNavItem(Screen.ExpenseList, "Expenses")   { Icon(Icons.Filled.List,          contentDescription = "Expenses") },
-        BottomNavItem(Screen.Categories,  "Categories") { Icon(Icons.Filled.Category,      contentDescription = "Categories") },
-        BottomNavItem(Screen.Goals,       "Goals")      { Icon(Icons.Filled.TrackChanges,  contentDescription = "Goals") },
-        BottomNavItem(Screen.Reports,     "Reports")    { Icon(Icons.Filled.BarChart,       contentDescription = "Reports") }
+        BottomNavItem(Screen.Home,        "Home")       { Icon(Icons.Filled.Home,        contentDescription = "Home") },
+        BottomNavItem(Screen.ExpenseList, "Expenses")   { Icon(Icons.Filled.List,         contentDescription = "Expenses") },
+        BottomNavItem(Screen.Categories,  "Categories") { Icon(Icons.Filled.Category,     contentDescription = "Categories") },
+        BottomNavItem(Screen.Goals,       "Goals")      { Icon(Icons.Filled.TrackChanges, contentDescription = "Goals") },
+        BottomNavItem(Screen.Reports,     "Reports")    { Icon(Icons.Filled.BarChart,      contentDescription = "Reports") }
     )
 
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
 
-    NavigationBar(
-        containerColor = Color.White
-    ) {
+    NavigationBar(containerColor = Color.White) {
         navItems.forEach { item ->
-            val selected = currentRoute == item.screen.route
             NavigationBarItem(
-                selected = selected,
+                selected = currentRoute == item.screen.route,
                 onClick  = {
                     navController.navigate(item.screen.route) {
-                        // Pop up to the graph's start destination to avoid stacking destinations
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true
                         restoreState    = true
                     }
                 },
-                icon    = item.icon,
-                label   = { Text(item.label) },
-                colors  = NavigationBarItemDefaults.colors(
+                icon   = item.icon,
+                label  = { Text(item.label) },
+                colors = NavigationBarItemDefaults.colors(
                     selectedIconColor   = TealPrimary,
                     selectedTextColor   = TealPrimary,
                     unselectedIconColor = TextMuted,
